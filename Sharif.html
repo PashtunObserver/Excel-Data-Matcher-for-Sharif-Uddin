@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sharif's Excel Data Reconciliation & Auto-Fill</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #06b6d4;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.3), 0 4px 6px -4px rgba(0,0,0,0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; }
+        .theme-toggle {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 10px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text);
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+        }
+        .theme-toggle:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+        /* Upload Section */
+        .upload-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+        .upload-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 28px;
+            border: 2px dashed var(--border);
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .upload-card.dragover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+            transform: scale(1.01);
+        }
+        .upload-card.uploaded {
+            border-color: var(--success);
+            border-style: solid;
+        }
+        .upload-card.error {
+            border-color: var(--danger);
+            border-style: solid;
+        }
+        .upload-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            font-size: 28px;
+            color: white;
+        }
+        .upload-card h3 { font-size: 1.2rem; margin-bottom: 8px; }
+        .upload-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; }
+        .file-input { display: none; }
+        .btn-upload {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+        }
+        .btn-upload:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .file-info {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 10px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-info.show { display: flex; }
+        .file-info .file-name { font-weight: 600; color: var(--success); }
+        .file-info .file-size { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* Sheet Selector */
+        .sheet-selector {
+            margin-top: 12px;
+            display: none;
+        }
+        .sheet-selector.show { display: block; }
+        .sheet-selector label { font-size: 0.85rem; color: var(--text-muted); }
+        .sheet-selector select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 6px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--card);
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        /* Process Button */
+        .process-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .btn-process {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 48px;
+            background: linear-gradient(135deg, var(--success), #059669);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .btn-process.active { opacity: 1; pointer-events: all; }
+        .btn-process.active:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+        .btn-process:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Progress Bar */
+        .progress-container {
+            max-width: 600px;
+            margin: 20px auto;
+            display: none;
+        }
+        .progress-container.show { display: block; }
+        .progress-bar {
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+            display: none;
+        }
+        .stats-grid.show { display: grid; }
+        .stat-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            transition: transform 0.3s;
+        }
+        .stat-card:hover { transform: translateY(-4px); }
+        .stat-card .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+        .stat-card .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .stat-card .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Preview Tables */
+        .preview-section {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 20px 0;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            display: none;
+        }
+        .preview-section.show { display: block; }
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .preview-header h3 { font-size: 1.2rem; }
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .badge-info { background: rgba(6, 182, 212, 0.15); color: var(--secondary); }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        td {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+        tr:hover { background: rgba(99, 102, 241, 0.05); }
+        tr.updated { background: rgba(16, 185, 129, 0.1); }
+        tr.unmatched { background: rgba(239, 68, 68, 0.05); }
+        tr.duplicate { background: rgba(245, 158, 11, 0.1); }
+        .cell-urdu { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', 'Arial', sans-serif; direction: rtl; text-align: right; }
+
+        /* Logs */
+        .logs-section {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 20px 0;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            display: none;
+        }
+        .logs-section.show { display: block; }
+        .log-entry {
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .log-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .log-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+        .log-error { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .log-info { background: rgba(6, 182, 212, 0.1); color: var(--secondary); }
+
+        /* Download Section */
+        .download-section {
+            text-align: center;
+            margin: 30px 0;
+            display: none;
+        }
+        .download-section.show { display: block; }
+        .btn-download {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 48px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+            animation: pulse 2s infinite;
+        }
+        .btn-download:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+            50% { box-shadow: 0 0 0 15px rgba(99, 102, 241, 0); }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-in { animation: fadeIn 0.5s ease-out forwards; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .upload-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; gap: 16px; text-align: center; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 14px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            box-shadow: var(--shadow-lg);
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 400px;
+        }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--danger); }
+        .toast-warning { background: var(--warning); }
+        .toast-info { background: var(--secondary); }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <h1>🤖 Sharif's Excel Reconciliation</h1>
+                <div class="subtitle">Developed and Designed By: Rashid</div>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span id="themeIcon">🌙</span>
+                <span id="themeText">Dark Mode</span>
+            </button>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-grid">
+            <!-- Source File Upload -->
+            <div class="upload-card" id="sourceCard" ondragover="handleDragOver(event, 'source')" ondragleave="handleDragLeave(event, 'source')" ondrop="handleDrop(event, 'source')">
+                <div class="upload-icon">📊</div>
+                <h3>Source File (File 1)</h3>
+                <p>Upload the master data file containing complete records. Columns A-D will be copied from here.</p>
+                <input type="file" id="sourceInput" class="file-input" accept=".xlsx,.xls" onchange="handleFileSelect(event, 'source')">
+                <button class="btn-upload" onclick="document.getElementById('sourceInput').click()">
+                    <span>📁</span> Choose File
+                </button>
+                <div class="file-info" id="sourceFileInfo">
+                    <span>✅</span>
+                    <div>
+                        <div class="file-name" id="sourceFileName"></div>
+                        <div class="file-size" id="sourceFileSize"></div>
+                    </div>
+                </div>
+                <div class="sheet-selector" id="sourceSheetSelector">
+                    <label>Select Worksheet:</label>
+                    <select id="sourceSheet" onchange="onSheetSelect('source')"></select>
+                </div>
+            </div>
+
+            <!-- Target File Upload -->
+            <div class="upload-card" id="targetCard" ondragover="handleDragOver(event, 'target')" ondragleave="handleDragLeave(event, 'target')" ondrop="handleDrop(event, 'target')">
+                <div class="upload-icon">📝</div>
+                <h3>Target File (File 2)</h3>
+                <p>Upload the file with incomplete records. Columns A-D will be auto-filled based on matches.</p>
+                <input type="file" id="targetInput" class="file-input" accept=".xlsx,.xls" onchange="handleFileSelect(event, 'target')">
+                <button class="btn-upload" onclick="document.getElementById('targetInput').click()">
+                    <span>📁</span> Choose File
+                </button>
+                <div class="file-info" id="targetFileInfo">
+                    <span>✅</span>
+                    <div>
+                        <div class="file-name" id="targetFileName"></div>
+                        <div class="file-size" id="targetFileSize"></div>
+                    </div>
+                </div>
+                <div class="sheet-selector" id="targetSheetSelector">
+                    <label>Select Worksheet:</label>
+                    <select id="targetSheet" onchange="onSheetSelect('target')"></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Process Button -->
+        <div class="process-section">
+            <button class="btn-process" id="processBtn" onclick="processFiles()">
+                <span>⚡</span> Process & Match Data
+            </button>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Initializing...</div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Total Rows</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-value" id="statMatched">0</div>
+                <div class="stat-label">Matches Found</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">❌</div>
+                <div class="stat-value" id="statUnmatched">0</div>
+                <div class="stat-label">Unmatched Rows</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔄</div>
+                <div class="stat-value" id="statUpdated">0</div>
+                <div class="stat-label">Rows Updated</div>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="logs-section" id="logsSection">
+            <div class="preview-header">
+                <h3>📋 Processing Logs</h3>
+                <span class="badge badge-info" id="logCount">0 entries</span>
+            </div>
+            <div id="logsContainer"></div>
+        </div>
+
+        <!-- Preview Updated Rows -->
+        <div class="preview-section" id="previewSection">
+            <div class="preview-header">
+                <h3>👁️ Preview of Updated Rows</h3>
+                <span class="badge badge-success" id="previewBadge">Updated</span>
+            </div>
+            <div class="table-container">
+                <table id="previewTable">
+                    <thead id="previewHead"></thead>
+                    <tbody id="previewBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Unmatched Rows -->
+        <div class="preview-section" id="unmatchedSection">
+            <div class="preview-header">
+                <h3>⚠️ Unmatched Rows</h3>
+                <span class="badge badge-warning">No Match Found</span>
+            </div>
+            <div class="table-container">
+                <table id="unmatchedTable">
+                    <thead id="unmatchedHead"></thead>
+                    <tbody id="unmatchedBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Download -->
+        <div class="download-section" id="downloadSection">
+            <button class="btn-download" onclick="downloadUpdatedFile()">
+                <span>⬇️</span> Download Updated File
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Global State
+        let sourceFile = null;
+        let targetFile = null;
+        let sourceWorkbook = null;
+        let targetWorkbook = null;
+        let sourceData = null;
+        let targetData = null;
+        let updatedWorkbook = null;
+        let processingLogs = [];
+        let matchResults = { total: 0, matched: 0, unmatched: 0, updated: 0 };
+
+        // Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            const text = document.getElementById('themeText');
+            if (html.getAttribute('data-theme') === 'dark') {
+                html.removeAttribute('data-theme');
+                icon.textContent = '🌙';
+                text.textContent = 'Dark Mode';
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                icon.textContent = '☀️';
+                text.textContent = 'Light Mode';
+            }
+        }
+
+        // Toast Notifications
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+            toast.innerHTML = `<span>${icons[type]}</span><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease-out forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Drag & Drop
+        function handleDragOver(e, type) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById(type + 'Card').classList.add('dragover');
+        }
+        function handleDragLeave(e, type) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById(type + 'Card').classList.remove('dragover');
+        }
+        function handleDrop(e, type) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById(type + 'Card').classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0], type);
+            }
+        }
+
+        // File Select
+        function handleFileSelect(e, type) {
+            const file = e.target.files[0];
+            if (file) processFile(file, type);
+        }
+
+        // Process File
+        async function processFile(file, type) {
+            const validExtensions = ['.xlsx', '.xls'];
+            const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            if (!validExtensions.includes(ext)) {
+                showToast('Invalid file type. Please upload .xlsx or .xls files.', 'error');
+                document.getElementById(type + 'Card').classList.add('error');
+                setTimeout(() => document.getElementById(type + 'Card').classList.remove('error'), 3000);
+                return;
+            }
+
+            if (type === 'source') sourceFile = file;
+            else targetFile = file;
+
+            // Show file info
+            document.getElementById(type + 'FileName').textContent = file.name;
+            document.getElementById(type + 'FileSize').textContent = formatFileSize(file.size);
+            document.getElementById(type + 'FileInfo').classList.add('show');
+            document.getElementById(type + 'Card').classList.add('uploaded');
+
+            // Read workbook
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array', cellStyles: true });
+                if (type === 'source') sourceWorkbook = workbook;
+                else targetWorkbook = workbook;
+
+                // Populate sheet selector
+                const selector = document.getElementById(type + 'Sheet');
+                selector.innerHTML = '';
+                workbook.SheetNames.forEach((name, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    selector.appendChild(opt);
+                });
+                document.getElementById(type + 'SheetSelector').classList.add('show');
+
+                // Auto-select first sheet
+                onSheetSelect(type);
+                showToast(`${type === 'source' ? 'Source' : 'Target'} file uploaded successfully!`, 'success');
+                checkReady();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function onSheetSelect(type) {
+            const sheetName = document.getElementById(type + 'Sheet').value;
+            const workbook = type === 'source' ? sourceWorkbook : targetWorkbook;
+            if (!workbook || !sheetName) return;
+            const sheet = workbook.Sheets[sheetName];
+            const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+            if (type === 'source') sourceData = data;
+            else targetData = data;
+            checkReady();
+        }
+
+        function checkReady() {
+            const btn = document.getElementById('processBtn');
+            if (sourceData && targetData && sourceData.length > 0 && targetData.length > 0) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+
+        // Add Log
+        function addLog(message, type = 'info') {
+            processingLogs.push({ message, type, time: new Date().toLocaleTimeString() });
+            const container = document.getElementById('logsContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const icons = { success: '✅', warning: '⚠️', error: '❌', info: 'ℹ️' };
+            entry.innerHTML = `<span>${icons[type]}</span><span><strong>[${processingLogs[processingLogs.length-1].time}]</strong> ${message}</span>`;
+            container.appendChild(entry);
+            document.getElementById('logCount').textContent = `${processingLogs.length} entries`;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Process Files
+        async function processFiles() {
+            if (!sourceData || !targetData) {
+                showToast('Please upload both files first!', 'error');
+                return;
+            }
+
+            // Reset state
+            processingLogs = [];
+            matchResults = { total: 0, matched: 0, unmatched: 0, updated: 0 };
+            document.getElementById('logsContainer').innerHTML = '';
+            document.getElementById('logsSection').classList.add('show');
+            document.getElementById('progressContainer').classList.add('show');
+            document.getElementById('processBtn').disabled = true;
+
+            addLog('Starting data reconciliation process...', 'info');
+            updateProgress(10, 'Reading source file data...');
+
+            // Validate columns
+            if (sourceData[0].length < 7) {
+                addLog('Source file must have at least 7 columns (A-G)', 'error');
+                showToast('Source file missing required columns!', 'error');
+                resetProcess();
+                return;
+            }
+            if (targetData[0].length < 7) {
+                addLog('Target file must have at least 7 columns (A-G)', 'error');
+                showToast('Target file missing required columns!', 'error');
+                resetProcess();
+                return;
+            }
+
+            updateProgress(20, 'Building match index from source file...');
+
+            // Build match index from source (using columns E, F, G -> indices 4, 5, 6)
+            const matchIndex = new Map();
+            const duplicateKeys = new Set();
+            let duplicateCount = 0;
+
+            for (let i = 1; i < sourceData.length; i++) {
+                const row = sourceData[i];
+                const keyE = normalizeValue(row[4]);
+                const keyF = normalizeValue(row[5]);
+                const keyG = normalizeValue(row[6]);
+                const matchKey = `${keyE}|${keyF}|${keyG}`;
+
+                if (matchIndex.has(matchKey)) {
+                    duplicateKeys.add(matchKey);
+                    duplicateCount++;
+                } else {
+                    matchIndex.set(matchKey, {
+                        rowIndex: i,
+                        values: [row[0], row[1], row[2], row[3]] // A, B, C, D
+                    });
+                }
+            }
+
+            if (duplicateCount > 0) {
+                addLog(`Warning: Found ${duplicateCount} duplicate key combinations in source file. Only first occurrence used.`, 'warning');
+            }
+            addLog(`Source index built: ${matchIndex.size} unique records`, 'success');
+
+            updateProgress(40, 'Processing target file and matching records...');
+
+            // Process target file
+            const updatedRows = [];
+            const unmatchedRows = [];
+            const targetHeaders = targetData[0];
+            const totalRows = targetData.length - 1;
+            matchResults.total = totalRows;
+
+            // Create updated workbook
+            const targetSheetName = document.getElementById('targetSheet').value;
+            updatedWorkbook = XLSX.utils.book_new();
+            const updatedData = JSON.parse(JSON.stringify(targetData)); // Deep copy
+
+            for (let i = 1; i < targetData.length; i++) {
+                const row = targetData[i];
+                const keyE = normalizeValue(row[4]);
+                const keyF = normalizeValue(row[5]);
+                const keyG = normalizeValue(row[6]);
+                const matchKey = `${keyE}|${keyF}|${keyG}`;
+
+                if (matchIndex.has(matchKey)) {
+                    const sourceRecord = matchIndex.get(matchKey);
+                    // Update columns A, B, C, D (indices 0, 1, 2, 3)
+                    const oldValues = [row[0], row[1], row[2], row[3]];
+                    updatedData[i][0] = sourceRecord.values[0];
+                    updatedData[i][1] = sourceRecord.values[1];
+                    updatedData[i][2] = sourceRecord.values[2];
+                    updatedData[i][3] = sourceRecord.values[3];
+
+                    const wasEmpty = oldValues.every(v => !v || String(v).trim() === '');
+                    matchResults.matched++;
+                    matchResults.updated++;
+
+                    updatedRows.push({
+                        index: i,
+                        oldValues: oldValues,
+                        newValues: sourceRecord.values,
+                        keyE: row[4],
+                        keyF: row[5],
+                        keyG: row[6],
+                        wasEmpty: wasEmpty
+                    });
+                } else {
+                    unmatchedRows.push({
+                        index: i,
+                        row: row,
+                        keyE: row[4],
+                        keyF: row[5],
+                        keyG: row[6]
+                    });
+                    matchResults.unmatched++;
+                }
+
+                // Update progress
+                const progress = 40 + Math.floor((i / totalRows) * 40);
+                updateProgress(progress, `Processing row ${i} of ${totalRows}...`);
+            }
+
+            // Create updated worksheet
+            const updatedSheet = XLSX.utils.aoa_to_sheet(updatedData);
+            XLSX.utils.book_append_sheet(updatedWorkbook, updatedSheet, targetSheetName);
+
+            updateProgress(90, 'Generating preview and reports...');
+
+            addLog(`Processing complete!`, 'success');
+            addLog(`Total rows processed: ${matchResults.total}`, 'info');
+            addLog(`Matches found: ${matchResults.matched}`, 'success');
+            addLog(`Unmatched rows: ${matchResults.unmatched}`, matchResults.unmatched > 0 ? 'warning' : 'info');
+            addLog(`Rows updated: ${matchResults.updated}`, 'success');
+
+            if (matchResults.matched === 0) {
+                addLog('No matches found! Please verify your data and matching columns.', 'warning');
+                showToast('No matches found between the files!', 'warning');
+            } else {
+                showToast(`Successfully matched ${matchResults.matched} records!`, 'success');
+            }
+
+            // Update stats
+            document.getElementById('statTotal').textContent = matchResults.total;
+            document.getElementById('statMatched').textContent = matchResults.matched;
+            document.getElementById('statUnmatched').textContent = matchResults.unmatched;
+            document.getElementById('statUpdated').textContent = matchResults.updated;
+            document.getElementById('statsGrid').classList.add('show');
+
+            // Show previews
+            showPreview(updatedRows, targetHeaders);
+            showUnmatched(unmatchedRows, targetHeaders);
+
+            updateProgress(100, 'Complete!');
+            document.getElementById('downloadSection').classList.add('show');
+            document.getElementById('processBtn').disabled = false;
+
+            // Scroll to stats
+            setTimeout(() => {
+                document.getElementById('statsGrid').scrollIntoView({ behavior: 'smooth' });
+            }, 500);
+        }
+
+        function normalizeValue(val) {
+            if (val === null || val === undefined) return '';
+            return String(val).trim().toLowerCase();
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function resetProcess() {
+            document.getElementById('processBtn').disabled = false;
+            document.getElementById('progressContainer').classList.remove('show');
+        }
+
+        function showPreview(updatedRows, headers) {
+            if (updatedRows.length === 0) return;
+
+            const section = document.getElementById('previewSection');
+            const thead = document.getElementById('previewHead');
+            const tbody = document.getElementById('previewBody');
+
+            // Build headers: Row #, Key E, Key F, Key G, Old A-D, New A-D
+            let html = '<tr><th>Row #</th>';
+            ['E (Key)', 'F (Key)', 'G (Key)'].forEach(h => html += `<th>${h}</th>`);
+            ['Old A', 'Old B', 'Old C', 'Old D'].forEach(h => html += `<th>${h}</th>`);
+            ['New A', 'New B', 'New C', 'New D'].forEach(h => html += `<th>${h}</th>`);
+            html += '<th>Status</th></tr>';
+            thead.innerHTML = html;
+
+            tbody.innerHTML = updatedRows.slice(0, 100).map(r => {
+                const oldVals = r.oldValues.map(v => `<td class="cell-urdu">${escapeHtml(String(v || ''))}</td>`).join('');
+                const newVals = r.newValues.map(v => `<td class="cell-urdu">${escapeHtml(String(v || ''))}</td>`).join('');
+                const status = r.wasEmpty
+                    ? '<span class="badge badge-success">Filled</span>'
+                    : '<span class="badge badge-warning">Overwritten</span>';
+                return `<tr class="updated">
+                    <td>${r.index + 1}</td>
+                    <td class="cell-urdu">${escapeHtml(String(r.keyE || ''))}</td>
+                    <td class="cell-urdu">${escapeHtml(String(r.keyF || ''))}</td>
+                    <td class="cell-urdu">${escapeHtml(String(r.keyG || ''))}</td>
+                    ${oldVals}
+                    ${newVals}
+                    <td>${status}</td>
+                </tr>`;
+            }).join('');
+
+            if (updatedRows.length > 100) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="12" style="text-align:center;color:var(--text-muted);padding:16px;">... and ${updatedRows.length - 100} more rows</td>`;
+                tbody.appendChild(row);
+            }
+
+            section.classList.add('show');
+        }
+
+        function showUnmatched(unmatchedRows, headers) {
+            if (unmatchedRows.length === 0) return;
+
+            const section = document.getElementById('unmatchedSection');
+            const thead = document.getElementById('unmatchedHead');
+            const tbody = document.getElementById('unmatchedBody');
+
+            let html = '<tr><th>Row #</th>';
+            for (let i = 0; i < Math.min(headers.length, 9); i++) {
+                html += `<th>${headers[i] || `Col ${String.fromCharCode(65+i)}`}</th>`;
+            }
+            html += '</tr>';
+            thead.innerHTML = html;
+
+            tbody.innerHTML = unmatchedRows.slice(0, 100).map(r => {
+                let cells = `<td>${r.index + 1}</td>`;
+                for (let i = 0; i < Math.min(r.row.length, 9); i++) {
+                    cells += `<td class="cell-urdu">${escapeHtml(String(r.row[i] || ''))}</td>`;
+                }
+                return `<tr class="unmatched">${cells}</tr>`;
+            }).join('');
+
+            if (unmatchedRows.length > 100) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="10" style="text-align:center;color:var(--text-muted);padding:16px;">... and ${unmatchedRows.length - 100} more rows</td>`;
+                tbody.appendChild(row);
+            }
+
+            section.classList.add('show');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function downloadUpdatedFile() {
+            if (!updatedWorkbook) {
+                showToast('No processed file available!', 'error');
+                return;
+            }
+
+            const wbout = XLSX.write(updatedWorkbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/octet-stream' });
+            const filename = 'Updated_File2_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+            saveAs(blob, filename);
+            addLog(`File downloaded: ${filename}`, 'success');
+            showToast('Updated file downloaded successfully!', 'success');
+        }
+    </script>
+</body>
+</html>
